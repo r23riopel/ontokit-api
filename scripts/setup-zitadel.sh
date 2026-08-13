@@ -23,6 +23,7 @@ NC='\033[0m' # No Color
 ZITADEL_URL="${ZITADEL_URL:-http://localhost:8080}"
 ZITADEL_DATA_VOLUME="${ZITADEL_DATA_VOLUME:-ontokit-api_zitadel_data}"
 WEB_PORT="${WEB_PORT:-3000}"
+WEB_URL="${WEB_URL:-http://localhost:${WEB_PORT}}"
 MAX_RETRIES=30
 RETRY_INTERVAL=5
 
@@ -355,8 +356,8 @@ main() {
     # Create OntoKit Web app
     echo
     WEB_CREDS=$(create_oidc_app "$PAT" "$PROJECT_ID" "OntoKit Web" \
-        "http://localhost:${WEB_PORT}/api/auth/callback/zitadel" \
-        "http://localhost:${WEB_PORT}")
+        "${WEB_URL}/api/auth/callback/zitadel" \
+        "${WEB_URL}")
     WEB_CLIENT_ID=$(echo "$WEB_CREDS" | cut -d: -f1)
     WEB_CLIENT_SECRET=$(echo "$WEB_CREDS" | cut -d: -f2)
 

@@ -68,6 +68,55 @@ uvicorn ontokit.main:app --reload
 
 See the [wiki](https://github.com/CatholicOS/ontokit-api/wiki) for full documentation.
 
+## Running OntoKit in GitHub Codespaces
+
+Create the Codespace from this (`ontokit-api`) repository. The dev-container
+initialization clones the canonical `ontokit-web` repository alongside it, so
+the Codespace contains two independent Git repositories:
+
+```text
+/workspaces/ontokit-api
+/workspaces/ontokit-web
+```
+
+Codespaces asks for read access to `r23riopel/ontokit-web`; approve that
+request when prompted. The repository is currently public, but the permission
+declaration also makes the required access explicit if its visibility changes.
+The Codespace then starts the existing API Compose stack plus the web service
+defined in `.devcontainer/compose.codespaces.yaml`. VS Code attaches to the
+`api` service at `/workspaces/ontokit-api`. The web and API are forwarded on
+ports 3000 and 8000. Zitadel and its login UI use ports 8080 and 8081. Database,
+Redis, and MinIO ports are not forwarded by the dev-container configuration.
+
+For a fresh Codespace, wait for the containers to become healthy, then configure
+the local Zitadel instance from the VS Code terminal:
+
+```bash
+export WEB_URL="https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+export ZITADEL_URL="http://zitadel:8080"
+./scripts/setup-zitadel.sh --update-env </dev/null
+docker compose -f compose.yaml -f .devcontainer/compose.codespaces.yaml up -d --force-recreate api worker web
+```
+
+Generated OIDC credentials are written only to the ignored `ontokit-api/.env`
+and `ontokit-web/.env.local` files. For shared or externally supplied
+credentials, configure Codespaces secrets named `ZITADEL_CLIENT_ID`,
+`ZITADEL_CLIENT_SECRET`, `ZITADEL_SERVICE_TOKEN`, `GITHUB_TOKEN_ENCRYPTION_KEY`,
+and `AUTH_SECRET` as applicable; do not commit their values. The bundled local
+Zitadel development setup generates its own values, so no repository secret is
+required for the default first run.
+
+Ontology source edits are persisted in two file-oriented stores: Turtle content
+is uploaded to the `minio_data` volume and committed into per-project bare Git
+repositories in the `git_repos` volume. PostgreSQL (`postgres_data`) stores
+project, user, revision-related, indexing, and other application metadata; it is
+not the sole source of ontology content. All volumes persist across normal
+Codespace container rebuilds but are lost when the Codespace itself is deleted.
+
+The normal local workflow remains unchanged: from this directory, run
+`docker compose up -d`. The Codespaces override and sibling web checkout are
+used only when the dev-container explicitly supplies the second Compose file.
+
 ## Tech Stack
 
 - **Framework**: FastAPI (Python 3.13)

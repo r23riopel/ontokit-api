@@ -1,0 +1,50 @@
+# Codespaces-only additions to the normal OntoKit development stack.
+# All relative paths are resolved from compose.yaml's directory, so
+# ../ontokit-web is /workspaces/ontokit-web in GitHub Codespaces.
+services:
+  zitadel:
+    environment:
+      ZITADEL_EXTERNALDOMAIN: ${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      ZITADEL_EXTERNALPORT: 443
+      ZITADEL_EXTERNALSECURE: "true"
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: https://${CODESPACE_NAME}-8081.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/ui/v2/login
+      ZITADEL_OIDC_DEFAULTLOGINURLV2: https://${CODESPACE_NAME}-8081.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/ui/v2/login/login?authRequest=
+      ZITADEL_OIDC_DEFAULTLOGOUTURLV2: https://${CODESPACE_NAME}-8081.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/ui/v2/login/logout?post_logout_redirect=
+      ZITADEL_SAML_DEFAULTLOGINURLV2: https://${CODESPACE_NAME}-8081.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/ui/v2/login/login?samlRequest=
+
+  api:
+    environment:
+      ZITADEL_ISSUER: https://${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      API_BASE_URL: https://${CODESPACE_NAME}-8000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      FRONTEND_URL: https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      CORS_ORIGINS: '["https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"]'
+
+  web:
+    image: node:22-alpine
+    user: node
+    working_dir: /workspace
+    command: ["sh", "-c", "npm ci && npm run dev -- --hostname 0.0.0.0"]
+    environment:
+      NEXT_PUBLIC_API_URL: https://${CODESPACE_NAME}-8000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      NEXT_PUBLIC_WS_URL: wss://${CODESPACE_NAME}-8000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      ZITADEL_ISSUER: https://${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      NEXT_PUBLIC_ZITADEL_ISSUER: https://${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      ZITADEL_CLIENT_ID: ${ZITADEL_CLIENT_ID:-}
+      NEXT_PUBLIC_ZITADEL_CLIENT_ID: ${ZITADEL_CLIENT_ID:-}
+      ZITADEL_CLIENT_SECRET: ${ZITADEL_CLIENT_SECRET:-}
+      AUTH_URL: https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      AUTH_SECRET: ${AUTH_SECRET:-codespaces-development-only-change-me}
+      AUTH_TRUST_HOST: "true"
+      SITE_URL: https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      REVALIDATION_SECRET: ${REVALIDATION_SECRET:-codespaces-development-only-change-me}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../ontokit-web:/workspace
+    networks:
+      - ontokit
+    depends_on:
+      api:
+        condition: service_healthy
+      zitadel:
+        condition: service_healthy
