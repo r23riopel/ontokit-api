@@ -12,11 +12,12 @@ services:
       ZITADEL_OIDC_DEFAULTLOGOUTURLV2: https://${CODESPACE_NAME}-8081.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/ui/v2/login/logout?post_logout_redirect=
       ZITADEL_SAML_DEFAULTLOGINURLV2: https://${CODESPACE_NAME}-8081.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/ui/v2/login/login?samlRequest=
   login:
+    network_mode: !reset null
+    networks:
+      - ontokit
     environment:
-      ZITADEL_API_URL: http://${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}:8080
+      ZITADEL_API_URL: http://zitadel:8080
       CUSTOM_REQUEST_HEADERS: Host:${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
-    extra_hosts:
-      - "${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}:127.0.0.1"
   api:    
     group_add:
       - "800"
