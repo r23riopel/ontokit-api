@@ -21,7 +21,9 @@
   "shutdownAction": "stopCompose",
   "overrideCommand": false,
   "features": {
-    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+  "moby": false
+}
   },
   "remoteEnv": {
     "CODESPACE_NAME": "${localEnv:CODESPACE_NAME}",
