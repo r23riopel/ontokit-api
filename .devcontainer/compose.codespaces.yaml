@@ -19,7 +19,15 @@ services:
       - ontokit
     environment:
       ZITADEL_API_URL: http://zitadel:8080
-      CUSTOM_REQUEST_HEADERS: Host:${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      # Zitadel resolves its instance from x-zitadel-instance-host, which the
+      # login app derives from each incoming request's Host header. In
+      # Codespaces every forwarded port is a distinct hostname, so requests
+      # arriving via the -8081 login domain (or the localhost health probe)
+      # never match the -8080 instance domain. Pinning the instance-host and
+      # public-host headers here overrides the derived values and makes all
+      # login->Zitadel calls resolve like a same-domain deployment. A plain
+      # Host: header does NOT work: x-zitadel-instance-host wins precedence.
+      CUSTOM_REQUEST_HEADERS: x-zitadel-instance-host:${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN},x-zitadel-public-host:${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
     ports:
       - "8081:3000"
   api:    
