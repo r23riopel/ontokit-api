@@ -94,9 +94,35 @@ the local Zitadel instance from the VS Code terminal:
 ```bash
 export WEB_URL="https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
 export ZITADEL_URL="http://zitadel:8080"
+export ZITADEL_INSTANCE_HOST="${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
 ./scripts/setup-zitadel.sh --update-env </dev/null
-docker compose -f compose.yaml -f .devcontainer/compose.codespaces.yaml up -d --force-recreate api worker web
 ```
+
+Then apply the generated credentials by rebuilding the dev container: open the
+Command Palette and run **Codespaces: Rebuild Container**. The rebuild re-runs
+Docker Compose from the Codespaces host, which re-reads `.env` and recreates
+the services with the new values.
+
+> **Warning:** do not run `docker compose up`, `--force-recreate`, or any
+> other command that creates containers from the integrated terminal with
+> default paths. The terminal runs inside the `api` container, where the
+> repository lives at `/workspaces/ontokit-api` — a path the host Docker
+> daemon cannot resolve. Containers created that way record broken bind-mount
+> sources and put the Codespace into recovery mode at the next restart.
+> Rebuild Container is the supported way to recreate services. If a one-off
+> manual recreation of a non-`api` service is unavoidable, pass the host-side
+> project directory explicitly and never target the `api` service (its
+> dev-container configuration only exists in the host-side invocation):
+>
+> ```bash
+> docker compose \
+>   --project-directory /var/lib/docker/codespacemount/workspace/ontokit-api \
+>   -f /workspaces/ontokit-api/compose.yaml \
+>   -f /workspaces/ontokit-api/.devcontainer/compose.codespaces.yaml \
+>   --env-file /workspaces/ontokit-api/.env \
+>   -p ontokit-api \
+>   up -d --no-deps <service>
+> ```
 
 Generated OIDC credentials are written only to the ignored `ontokit-api/.env`
 and `ontokit-web/.env.local` files. For shared or externally supplied
