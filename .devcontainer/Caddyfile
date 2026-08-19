@@ -1,0 +1,13 @@
+{
+	admin off
+	auto_https disable_redirects
+}
+
+# Serve the Zitadel external hostname inside the Compose network with an
+# internally-signed certificate, proxying to the real Zitadel container.
+# The incoming Host header is preserved, which is exactly the hostname
+# Zitadel's instance resolver expects.
+https://{$ZITADEL_EXTERNAL_HOST} {
+	tls internal
+	reverse_proxy zitadel:8080
+}

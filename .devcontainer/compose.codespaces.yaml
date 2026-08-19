@@ -39,6 +39,26 @@ services:
       FRONTEND_URL: https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
       CORS_ORIGINS: '["https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"]'
 
+  # The web container's server-side OIDC calls (issuer discovery, token
+  # exchange, refresh) target the Zitadel external hostname, but GitHub's
+  # proxy will not serve a Private forwarded port to container-originated
+  # requests. This Caddy instance claims that hostname as a network alias and
+  # TLS-proxies it straight to Zitadel, so those calls never leave the
+  # Compose network. Browsers keep using the real GitHub-proxied URL.
+  zitadel-alias:
+    image: caddy:2-alpine
+    environment:
+      ZITADEL_EXTERNAL_HOST: ${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+    volumes:
+      - ./.devcontainer/Caddyfile:/etc/caddy/Caddyfile:ro
+    networks:
+      ontokit:
+        aliases:
+          - ${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+    depends_on:
+      zitadel:
+        condition: service_healthy
+
   web:
     image: node:22-alpine
     user: node
@@ -46,6 +66,8 @@ services:
     command: ["sh", "-c", "npm ci && npm run dev -- --hostname 0.0.0.0"]
     environment:
       NEXT_PUBLIC_API_URL: https://${CODESPACE_NAME}-8000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      # Dev-only: the zitadel-alias proxy signs with Caddy's internal CA.
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
       NEXT_PUBLIC_WS_URL: wss://${CODESPACE_NAME}-8000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
       ZITADEL_ISSUER: https://${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
       NEXT_PUBLIC_ZITADEL_ISSUER: https://${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
@@ -68,3 +90,5 @@ services:
         condition: service_started
       zitadel:
         condition: service_healthy
+      zitadel-alias:
+        condition: service_started
