@@ -3,11 +3,18 @@
 	auto_https disable_redirects
 }
 
-# Serve the Zitadel external hostname inside the Compose network with an
-# internally-signed certificate, proxying to the real Zitadel container.
-# The incoming Host header is preserved, which is exactly the hostname
-# Zitadel's instance resolver expects.
+# Serve the Zitadel and web external hostnames inside the Compose network
+# with internally-signed certificates, proxying to the real containers. The
+# incoming Host header is preserved, which is exactly what Zitadel's
+# instance resolver expects. This lets server-side code (OIDC discovery,
+# token exchange, SSR fetches to the app's own API URL) use the same
+# external URLs as browsers do, without crossing GitHub's port-auth proxy.
 https://{$ZITADEL_EXTERNAL_HOST} {
 	tls internal
 	reverse_proxy zitadel:8080
+}
+
+https://{$WEB_EXTERNAL_HOST} {
+	tls internal
+	reverse_proxy web:3000
 }
