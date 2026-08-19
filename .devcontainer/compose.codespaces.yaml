@@ -28,8 +28,8 @@ services:
       # login->Zitadel calls resolve like a same-domain deployment. A plain
       # Host: header does NOT work: x-zitadel-instance-host wins precedence.
       CUSTOM_REQUEST_HEADERS: x-zitadel-instance-host:${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN},x-zitadel-public-host:${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
-    ports:
-      - "8081:3000"
+    # Port 8081 is published by the zitadel-alias proxy, which repairs the
+    # Origin header before forwarding here (see Caddyfile).
   api:    
     group_add:
       - "800"
@@ -50,6 +50,11 @@ services:
     environment:
       ZITADEL_EXTERNAL_HOST: ${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
       WEB_EXTERNAL_HOST: ${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      LOGIN_EXTERNAL_HOST: ${CODESPACE_NAME}-8081.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+    # Port 8081 is published from this proxy rather than from the login
+    # service so the Origin header can be repaired first (see Caddyfile).
+    ports:
+      - "8081:8081"
     volumes:
       - ./.devcontainer/Caddyfile:/etc/caddy/Caddyfile:ro
     networks:

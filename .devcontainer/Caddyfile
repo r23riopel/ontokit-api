@@ -18,3 +18,14 @@ https://{$WEB_EXTERNAL_HOST} {
 	tls internal
 	reverse_proxy web:3000
 }
+
+# Published on the Codespace host as port 8081. GitHub's port proxy
+# rewrites the browser's Origin header to localhost:8081, which trips the
+# Next.js Server Actions cross-origin check inside the prebuilt Zitadel
+# Login app ("Invalid Server Actions request"). Rewrite Origin back to the
+# external hostname so it matches the forwarded host again.
+http://:8081 {
+	reverse_proxy login:3000 {
+		header_up Origin https://{$LOGIN_EXTERNAL_HOST}
+	}
+}
