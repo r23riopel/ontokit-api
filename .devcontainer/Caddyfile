@@ -26,6 +26,10 @@ https://{$WEB_EXTERNAL_HOST} {
 # external hostname so it matches the forwarded host again.
 http://:8081 {
 	reverse_proxy login:3000 {
+		header_up Host {$LOGIN_EXTERNAL_HOST}
 		header_up Origin https://{$LOGIN_EXTERNAL_HOST}
+		header_up X-Forwarded-Host {$LOGIN_EXTERNAL_HOST}
+		header_up X-Forwarded-Proto https
+		header_up X-Forwarded-Port 443
 	}
 }
