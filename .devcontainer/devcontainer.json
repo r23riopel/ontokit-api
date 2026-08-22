@@ -1,0 +1,83 @@
+{
+  "name": "OntoKit",
+  "dockerComposeFile": [
+    "../compose.yaml",
+    "compose.codespaces.yaml"
+  ],
+  "service": "api",
+  "runServices": [
+    "postgres",
+    "redis",
+    "minio",
+    "mailpit",
+    "zitadel",
+    "login",
+    "api",
+    "worker",
+    "web"
+  ],
+  "workspaceFolder": "/workspaces/ontokit-api",
+  "initializeCommand": "bash .devcontainer/clone-ontokit-web.sh",
+  "shutdownAction": "stopCompose",
+  "overrideCommand": false,
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": false,
+      "installOhMyZsh": false,
+      "upgradePackages": false,
+      "username": "ontokit"
+    },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "moby": false
+    },
+    "ghcr.io/devcontainers/features/sshd:1": {
+      "version": "latest"
+    }
+  },
+  "remoteEnv": {
+    "CODESPACE_NAME": "${localEnv:CODESPACE_NAME}",
+    "GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN": "${localEnv:GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+  },
+  "forwardPorts": [3000, 8000, 8080, 8081],
+  "portsAttributes": {
+    "3000": {
+      "label": "OntoKit Web",
+      "onAutoForward": "openPreview"
+    },
+    "8000": {
+      "label": "OntoKit API",
+      "onAutoForward": "notify"
+    },
+    "8080": {
+      "label": "Zitadel",
+      "onAutoForward": "silent"
+    },
+    "8081": {
+      "label": "Zitadel Login",
+      "onAutoForward": "silent"
+    },
+    "5432": {
+      "label": "PostgreSQL (internal only)",
+      "onAutoForward": "ignore"
+    }
+  },
+  "customizations": {
+    "codespaces": {
+      "repositories": {
+        "r23riopel/ontokit-web": {
+          "permissions": {
+            "contents": "read"
+          }
+        }
+      }
+    },
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "dbaeumer.vscode-eslint"
+      ]
+    }
+  }
+}

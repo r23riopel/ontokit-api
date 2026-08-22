@@ -1,0 +1,106 @@
+# Codespaces-only additions to the normal OntoKit development stack.
+# All relative paths are resolved from compose.yaml's directory, so
+# ../ontokit-web is /workspaces/ontokit-web in GitHub Codespaces.
+services:
+  zitadel:
+    environment:
+      ZITADEL_EXTERNALDOMAIN: ${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      ZITADEL_EXTERNALPORT: 443
+      ZITADEL_EXTERNALSECURE: "true"
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: https://${CODESPACE_NAME}-8081.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/ui/v2/login
+      ZITADEL_OIDC_DEFAULTLOGINURLV2: https://${CODESPACE_NAME}-8081.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/ui/v2/login/login?authRequest=
+      ZITADEL_OIDC_DEFAULTLOGOUTURLV2: https://${CODESPACE_NAME}-8081.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/ui/v2/login/logout?post_logout_redirect=
+      ZITADEL_SAML_DEFAULTLOGINURLV2: https://${CODESPACE_NAME}-8081.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/ui/v2/login/login?samlRequest=
+    ports: !override
+      - "8080:8080"
+  login:
+    network_mode: !reset null
+    networks:
+      - ontokit
+    environment:
+      ZITADEL_API_URL: http://zitadel:8080
+      # Zitadel resolves its instance from x-zitadel-instance-host, which the
+      # login app derives from each incoming request's Host header. In
+      # Codespaces every forwarded port is a distinct hostname, so requests
+      # arriving via the -8081 login domain (or the localhost health probe)
+      # never match the -8080 instance domain. Pinning the instance-host and
+      # public-host headers here overrides the derived values and makes all
+      # login->Zitadel calls resolve like a same-domain deployment. A plain
+      # Host: header does NOT work: x-zitadel-instance-host wins precedence.
+      CUSTOM_REQUEST_HEADERS: x-zitadel-instance-host:${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN},x-zitadel-public-host:${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+    # Port 8081 is published by the zitadel-alias proxy, which repairs the
+    # Origin header before forwarding here (see Caddyfile).
+  api:    
+    group_add:
+      - "800"
+    environment:
+      ZITADEL_ISSUER: https://${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      API_BASE_URL: https://${CODESPACE_NAME}-8000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      FRONTEND_URL: https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      CORS_ORIGINS: '["https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"]'
+
+  # The web container's server-side OIDC calls (issuer discovery, token
+  # exchange, refresh) target the Zitadel external hostname, but GitHub's
+  # proxy will not serve a Private forwarded port to container-originated
+  # requests. This Caddy instance claims that hostname as a network alias and
+  # TLS-proxies it straight to Zitadel, so those calls never leave the
+  # Compose network. Browsers keep using the real GitHub-proxied URL.
+  zitadel-alias:
+    image: caddy:2-alpine
+    environment:
+      ZITADEL_EXTERNAL_HOST: ${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      WEB_EXTERNAL_HOST: ${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      LOGIN_EXTERNAL_HOST: ${CODESPACE_NAME}-8081.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+    # Port 8081 is published from this proxy rather than from the login
+    # service so the Origin header can be repaired first (see Caddyfile).
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./.devcontainer/Caddyfile:/etc/caddy/Caddyfile:ro
+    networks:
+      ontokit:
+        aliases:
+          - ${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+          - ${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+    depends_on:
+      zitadel:
+        condition: service_healthy
+
+  web:
+    image: node:22-alpine
+    user: node
+    working_dir: /workspace
+    command: ["sh", "-c", "npm ci && npm run dev -- --hostname 0.0.0.0"]
+    environment:
+      # Browser fetches to the API's own Private port hostname are rejected
+      # by GitHub's port authentication (each forwarded port is a separate
+      # origin), so API calls go same-origin through /backend-api and Next
+      # rewrites them to the API over the Compose network.
+      NEXT_PUBLIC_API_URL: https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/backend-api
+      API_PROXY_TARGET: http://api:8000
+      # Dev-only: the zitadel-alias proxy signs with Caddy's internal CA.
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      NEXT_PUBLIC_WS_URL: wss://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/backend-api
+      ZITADEL_ISSUER: https://${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      NEXT_PUBLIC_ZITADEL_ISSUER: https://${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      ZITADEL_CLIENT_ID: ${ZITADEL_CLIENT_ID:-}
+      NEXT_PUBLIC_ZITADEL_CLIENT_ID: ${ZITADEL_CLIENT_ID:-}
+      ZITADEL_CLIENT_SECRET: ${ZITADEL_CLIENT_SECRET:-}
+      AUTH_URL: https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      AUTH_SECRET: ${AUTH_SECRET:-codespaces-development-only-change-me}
+      AUTH_TRUST_HOST: "true"
+      SITE_URL: https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+      REVALIDATION_SECRET: ${REVALIDATION_SECRET:-codespaces-development-only-change-me}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../ontokit-web:/workspace
+    networks:
+      - ontokit
+    depends_on:
+      api:
+        condition: service_started
+      zitadel:
+        condition: service_healthy
+      zitadel-alias:
+        condition: service_started

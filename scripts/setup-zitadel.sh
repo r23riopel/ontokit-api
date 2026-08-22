@@ -23,8 +23,20 @@ NC='\033[0m' # No Color
 ZITADEL_URL="${ZITADEL_URL:-http://localhost:8080}"
 ZITADEL_DATA_VOLUME="${ZITADEL_DATA_VOLUME:-ontokit-api_zitadel_data}"
 WEB_PORT="${WEB_PORT:-3000}"
+WEB_URL="${WEB_URL:-http://localhost:${WEB_PORT}}"
 MAX_RETRIES=30
 RETRY_INTERVAL=5
+
+# Zitadel resolves its instance from the request's host, so API calls made
+# through a stack-internal hostname (e.g. http://zitadel:8080 in Codespaces)
+# fail with Errors.Instance.NotFound. Setting ZITADEL_INSTANCE_HOST to the
+# instance's external hostname adds the headers that make those calls resolve.
+# The value must not contain spaces. Leave unset locally, where the default
+# localhost URL already matches the instance domain.
+ZITADEL_CURL_ARGS=""
+if [ -n "${ZITADEL_INSTANCE_HOST:-}" ]; then
+    ZITADEL_CURL_ARGS="-H x-zitadel-instance-host:${ZITADEL_INSTANCE_HOST} -H x-forwarded-proto:https"
+fi
 
 # Output files
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -99,7 +111,7 @@ prompt_docker_action() {
 wait_for_zitadel() {
     echo -e "${YELLOW}Waiting for Zitadel to be ready...${NC}"
     for i in $(seq 1 $MAX_RETRIES); do
-        if curl -s "${ZITADEL_URL}/debug/healthz" > /dev/null 2>&1; then
+        if curl -s ${ZITADEL_CURL_ARGS} "${ZITADEL_URL}/debug/healthz" > /dev/null 2>&1; then
             echo -e "${GREEN}Zitadel is ready!${NC}"
             return 0
         fi
@@ -135,7 +147,7 @@ create_project() {
     echo -e "${YELLOW}Creating OntoKit project...${NC}" >&2
 
     # Check if project already exists
-    existing=$(curl -s -X POST "${ZITADEL_URL}/management/v1/projects/_search" \
+    existing=$(curl -s ${ZITADEL_CURL_ARGS} -X POST "${ZITADEL_URL}/management/v1/projects/_search" \
         -H "Authorization: Bearer $pat" \
         -H "Content-Type: application/json" \
         -d '{"queries": [{"nameQuery": {"name": "OntoKit", "method": "TEXT_QUERY_METHOD_EQUALS"}}]}')
@@ -149,7 +161,7 @@ create_project() {
     fi
 
     # Create new project
-    result=$(curl -s -X POST "${ZITADEL_URL}/management/v1/projects" \
+    result=$(curl -s ${ZITADEL_CURL_ARGS} -X POST "${ZITADEL_URL}/management/v1/projects" \
         -H "Authorization: Bearer $pat" \
         -H "Content-Type: application/json" \
         -d '{"name": "OntoKit"}')
@@ -200,7 +212,7 @@ create_oidc_app() {
     echo -e "${YELLOW}Creating OIDC app: $app_name...${NC}" >&2
 
     # Check if app already exists
-    existing=$(curl -s -X POST "${ZITADEL_URL}/management/v1/projects/${project_id}/apps/_search" \
+    existing=$(curl -s ${ZITADEL_CURL_ARGS} -X POST "${ZITADEL_URL}/management/v1/projects/${project_id}/apps/_search" \
         -H "Authorization: Bearer $pat" \
         -H "Content-Type: application/json" \
         -d '{}')
@@ -224,7 +236,7 @@ create_oidc_app() {
                 echo -e "${YELLOW}No existing secret found, generating new one...${NC}" >&2
             fi
             # Generate new client secret
-            secret_result=$(curl -s -X POST "${ZITADEL_URL}/management/v1/projects/${project_id}/apps/${existing_id}/oidc_config/_generate_client_secret" \
+            secret_result=$(curl -s ${ZITADEL_CURL_ARGS} -X POST "${ZITADEL_URL}/management/v1/projects/${project_id}/apps/${existing_id}/oidc_config/_generate_client_secret" \
                 -H "Authorization: Bearer $pat" \
                 -H "Content-Type: application/json")
 
@@ -232,7 +244,7 @@ create_oidc_app() {
         fi
 
         # Update config to ensure idTokenUserinfoAssertion is enabled
-        curl -s -X PUT "${ZITADEL_URL}/management/v1/projects/${project_id}/apps/${existing_id}/oidc_config" \
+        curl -s ${ZITADEL_CURL_ARGS} -X PUT "${ZITADEL_URL}/management/v1/projects/${project_id}/apps/${existing_id}/oidc_config" \
             -H "Authorization: Bearer $pat" \
             -H "Content-Type: application/json" \
             -d "{
@@ -253,7 +265,7 @@ create_oidc_app() {
     fi
 
     # Create new app
-    result=$(curl -s -X POST "${ZITADEL_URL}/management/v1/projects/${project_id}/apps/oidc" \
+    result=$(curl -s ${ZITADEL_CURL_ARGS} -X POST "${ZITADEL_URL}/management/v1/projects/${project_id}/apps/oidc" \
         -H "Authorization: Bearer $pat" \
         -H "Content-Type: application/json" \
         -d "{
@@ -289,7 +301,7 @@ get_admin_user_id() {
     echo -e "${YELLOW}Getting admin user ID...${NC}" >&2
 
     # Search for the admin user
-    result=$(curl -s -X POST "${ZITADEL_URL}/management/v1/users/_search" \
+    result=$(curl -s ${ZITADEL_CURL_ARGS} -X POST "${ZITADEL_URL}/management/v1/users/_search" \
         -H "Authorization: Bearer $pat" \
         -H "Content-Type: application/json" \
         -d '{"queries": [{"userNameQuery": {"userName": "admin@ontokit.localhost", "method": "TEXT_QUERY_METHOD_EQUALS"}}]}')
@@ -355,8 +367,8 @@ main() {
     # Create OntoKit Web app
     echo
     WEB_CREDS=$(create_oidc_app "$PAT" "$PROJECT_ID" "OntoKit Web" \
-        "http://localhost:${WEB_PORT}/api/auth/callback/zitadel" \
-        "http://localhost:${WEB_PORT}")
+        "${WEB_URL}/api/auth/callback/zitadel" \
+        "${WEB_URL}")
     WEB_CLIENT_ID=$(echo "$WEB_CREDS" | cut -d: -f1)
     WEB_CLIENT_SECRET=$(echo "$WEB_CREDS" | cut -d: -f2)
 

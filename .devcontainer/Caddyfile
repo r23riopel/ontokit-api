@@ -1,0 +1,35 @@
+{
+	admin off
+	auto_https disable_redirects
+}
+
+# Serve the Zitadel and web external hostnames inside the Compose network
+# with internally-signed certificates, proxying to the real containers. The
+# incoming Host header is preserved, which is exactly what Zitadel's
+# instance resolver expects. This lets server-side code (OIDC discovery,
+# token exchange, SSR fetches to the app's own API URL) use the same
+# external URLs as browsers do, without crossing GitHub's port-auth proxy.
+https://{$ZITADEL_EXTERNAL_HOST} {
+	tls internal
+	reverse_proxy zitadel:8080
+}
+
+https://{$WEB_EXTERNAL_HOST} {
+	tls internal
+	reverse_proxy web:3000
+}
+
+# Published on the Codespace host as port 8081. GitHub's port proxy
+# rewrites the browser's Origin header to localhost:8081, which trips the
+# Next.js Server Actions cross-origin check inside the prebuilt Zitadel
+# Login app ("Invalid Server Actions request"). Rewrite Origin back to the
+# external hostname so it matches the forwarded host again.
+http://:8081 {
+	reverse_proxy login:3000 {
+		header_up Host {$LOGIN_EXTERNAL_HOST}
+		header_up Origin https://{$LOGIN_EXTERNAL_HOST}
+		header_up X-Forwarded-Host {$LOGIN_EXTERNAL_HOST}
+		header_up X-Forwarded-Proto https
+		header_up X-Forwarded-Port 443
+	}
+}
