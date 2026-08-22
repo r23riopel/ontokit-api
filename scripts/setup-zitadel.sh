@@ -72,8 +72,24 @@ is_api_running_in_docker() {
     docker compose ps --status running 2>/dev/null | grep -q "ontokit-api"
 }
 
+# In GitHub Codespaces this script runs inside the api container, where
+# docker compose resolves bind-mount paths the host daemon cannot see.
+# Containers created that way put the Codespace into recovery mode at the
+# next restart, so every compose-mutating path below is disabled there.
+# Apply credentials in Codespaces with "Codespaces: Rebuild Container".
+refuse_compose_in_codespaces() {
+    if [ "${CODESPACES:-}" = "true" ]; then
+        echo -e "${RED}Refusing to run docker compose inside GitHub Codespaces.${NC}" >&2
+        echo -e "${YELLOW}Apply changes with: F1 -> 'Codespaces: Rebuild Container'.${NC}" >&2
+        echo -e "${YELLOW}See 'Running OntoKit in GitHub Codespaces' in the README.${NC}" >&2
+        return 0
+    fi
+    return 1
+}
+
 # Function to start Docker stack
 start_docker_stack() {
+    refuse_compose_in_codespaces && return 0
     echo -e "${YELLOW}Starting Docker stack...${NC}" >&2
     cd "$API_DIR"
     docker compose up -d
@@ -82,6 +98,7 @@ start_docker_stack() {
 
 # Function to recreate API container to pick up new env vars
 recreate_api_container() {
+    refuse_compose_in_codespaces && return 0
     echo -e "${YELLOW}Recreating API container to pick up new credentials...${NC}" >&2
     cd "$API_DIR"
     docker compose up -d --force-recreate api worker
@@ -345,7 +362,7 @@ update_env_file() {
 # Main execution
 main() {
     # Handle --docker-init: start Docker stack if not running
-    if [[ "$DOCKER_INIT" == "true" ]]; then
+    if [[ "$DOCKER_INIT" == "true" ]] && ! refuse_compose_in_codespaces; then
         cd "$API_DIR"
         if ! docker compose ps --status running 2>/dev/null | grep -q "ontokit-zitadel"; then
             echo -e "${YELLOW}Starting Docker stack...${NC}"
@@ -432,7 +449,9 @@ main() {
         else
             # Non-interactive, non-docker-init: just remind user
             echo -e "${YELLOW}Remember to restart your services to pick up the new credentials.${NC}"
-            if is_api_running_in_docker; then
+            if [ "${CODESPACES:-}" = "true" ]; then
+                echo -e "${YELLOW}In GitHub Codespaces: F1 -> 'Codespaces: Rebuild Container'.${NC}"
+            elif is_api_running_in_docker; then
                 echo -e "${YELLOW}Run: docker compose up -d --force-recreate api worker${NC}"
             fi
         fi
