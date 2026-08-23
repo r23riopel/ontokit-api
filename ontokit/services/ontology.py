@@ -108,6 +108,8 @@ ANNOTATION_PROPERTIES = {
     "skos:historyNote": SKOS.historyNote,
     "skos:editorialNote": SKOS.editorialNote,
     "skos:changeNote": SKOS.changeNote,
+    # SHACL (non-validating UI annotations)
+    "sh:order": URIRef("http://www.w3.org/ns/shacl#order"),
     # Other common RDFS/OWL
     "rdfs:seeAlso": RDFS.seeAlso,
     "rdfs:isDefinedBy": RDFS.isDefinedBy,

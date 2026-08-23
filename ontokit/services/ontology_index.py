@@ -77,6 +77,30 @@ def _extract_local_name(iri: str) -> str:
     return iri.rsplit("/", 1)[-1]
 
 
+# Sort annotation properties consulted for tree ordering
+SH_ORDER_IRI = "http://www.w3.org/ns/shacl#order"
+SKOS_NOTATION_IRI = str(SKOS.notation)
+
+
+def _tree_sort_key(
+    label: str,
+    sort_order: float | None,
+    notation: str | None,
+) -> tuple[int, float, str, str]:
+    """Build the sibling sort key for class tree nodes.
+
+    Precedence: explicit sh:order (numeric) first, then skos:notation
+    (lexicographic), then label. Nodes carrying an earlier-precedence
+    annotation sort before nodes that lack it, so ordered nodes group at
+    the top of their sibling list. Label is always the final tie-breaker.
+    """
+    if sort_order is not None:
+        return (0, sort_order, "", label.lower())
+    if notation is not None:
+        return (1, 0.0, notation.lower(), label.lower())
+    return (2, 0.0, "", label.lower())
+
+
 class OntologyIndexService:
     """Service for populating and querying the ontology index tables."""
 
@@ -496,6 +520,7 @@ class OntologyIndexService:
         # Bulk-resolve labels for all root classes
         iris = [row.iri for row in rows]
         label_map = await self._resolve_labels_bulk(project_id, branch, iris, label_preferences)
+        sort_map = await self._resolve_sort_annotations_bulk(project_id, branch, iris)
 
         nodes = [
             {
@@ -507,8 +532,8 @@ class OntologyIndexService:
             for row in rows
         ]
 
-        # Sort by resolved label
-        nodes.sort(key=lambda n: n["label"].lower())
+        # Sort by sh:order, then skos:notation, then resolved label
+        nodes.sort(key=lambda n: _tree_sort_key(n["label"], *sort_map.get(n["iri"], (None, None))))
         return nodes
 
     async def get_class_children(
@@ -560,6 +585,7 @@ class OntologyIndexService:
         # Bulk-resolve labels for all children
         iris = [row.iri for row in rows]
         label_map = await self._resolve_labels_bulk(project_id, branch, iris, label_preferences)
+        sort_map = await self._resolve_sort_annotations_bulk(project_id, branch, iris)
 
         nodes = [
             {
@@ -571,7 +597,8 @@ class OntologyIndexService:
             for row in rows
         ]
 
-        nodes.sort(key=lambda n: n["label"].lower())
+        # Sort by sh:order, then skos:notation, then resolved label
+        nodes.sort(key=lambda n: _tree_sort_key(n["label"], *sort_map.get(n["iri"], (None, None))))
         return nodes
 
     async def get_class_detail(
@@ -1087,6 +1114,52 @@ class OntologyIndexService:
     # ──────────────────────────────────────────────
     # Label resolution
     # ──────────────────────────────────────────────
+
+    async def _resolve_sort_annotations_bulk(
+        self,
+        project_id: UUID,
+        branch: str,
+        iris: list[str],
+    ) -> dict[str, tuple[float | None, str | None]]:
+        """Resolve tree-ordering annotations for multiple IRIs in bulk.
+
+        Returns a dict mapping IRI -> (sh:order as float or None,
+        skos:notation or None). Non-numeric sh:order values are ignored.
+        When an entity carries multiple values for a property, the smallest
+        is used so ordering stays deterministic.
+        """
+        if not iris:
+            return {}
+
+        rows = await self.db.execute(
+            select(
+                IndexedEntity.iri,
+                IndexedAnnotation.property_iri,
+                IndexedAnnotation.value,
+            )
+            .join(IndexedAnnotation, IndexedAnnotation.entity_id == IndexedEntity.id)
+            .where(
+                IndexedEntity.project_id == project_id,
+                IndexedEntity.branch == branch,
+                IndexedEntity.iri.in_(iris),
+                IndexedAnnotation.property_iri.in_([SH_ORDER_IRI, SKOS_NOTATION_IRI]),
+            )
+        )
+
+        orders: dict[str, float] = {}
+        notations: dict[str, str] = {}
+        for iri, property_iri, value in rows.all():
+            if property_iri == SH_ORDER_IRI:
+                try:
+                    order = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if iri not in orders or order < orders[iri]:
+                    orders[iri] = order
+            elif iri not in notations or value < notations[iri]:
+                notations[iri] = value
+
+        return {iri: (orders.get(iri), notations.get(iri)) for iri in iris}
 
     async def _resolve_labels_bulk(
         self,
