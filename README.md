@@ -98,10 +98,25 @@ export ZITADEL_INSTANCE_HOST="${CODESPACE_NAME}-8080.${GITHUB_CODESPACES_PORT_FO
 ./scripts/setup-zitadel.sh --update-env </dev/null
 ```
 
+The setup summary ends with a **Zitadel Admin Login** section — note the
+username it prints. It is derived from your Codespace's hostname
+(`admin@ontokit.<your-codespace>-8080.app.github.dev`, password `Admin123!`)
+and is different in every Codespace; the `admin@ontokit.localhost` name only
+exists in local setups. Re-run the setup script any time to print it again.
+
 Then apply the generated credentials by rebuilding the dev container: open the
 Command Palette and run **Codespaces: Rebuild Container**. The rebuild re-runs
 Docker Compose from the Codespaces host, which re-reads `.env` and recreates
 the services with the new values.
+
+After the rebuild reconnects, allow about five minutes for the web container
+to reinstall its packages (the browser shows a "can't currently handle this
+request" page until the dev server is up — just refresh). Then open the
+**Ports** panel, click the globe icon on port **3000**, and sign in with the
+admin username from the setup output. The same five-minute web warm-up applies
+every time the Codespace resumes from a stop. Keep all forwarded ports
+**Private** — never click "Make Public"; the stack runs with development
+credentials.
 
 > **Warning:** do not run `docker compose up`, `--force-recreate`, or any
 > other command that creates containers from the integrated terminal with

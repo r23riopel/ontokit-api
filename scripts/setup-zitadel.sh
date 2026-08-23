@@ -67,6 +67,12 @@ echo -e "${BLUE}  OntoKit Zitadel Setup Script${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo
 
+if ! command -v jq > /dev/null 2>&1; then
+    echo -e "${RED}jq is required but not installed.${NC}"
+    echo -e "${YELLOW}Install it first, e.g.: sudo apt-get update && sudo apt-get install -y jq${NC}"
+    exit 1
+fi
+
 # Function to check if API is running in Docker
 is_api_running_in_docker() {
     docker compose ps --status running 2>/dev/null | grep -q "ontokit-api"
@@ -312,7 +318,10 @@ create_oidc_app() {
     fi
 }
 
-# Function to get admin user ID
+# Function to look up the admin user. Echoes "<id>|<preferredLoginName>".
+# Zitadel derives the admin's login name from the org and instance domain
+# (admin@ontokit.localhost locally, admin@ontokit.<external-domain> in
+# GitHub Codespaces), so match on the stable prefix instead of a fixed name.
 get_admin_user_id() {
     local pat="$1"
     echo -e "${YELLOW}Getting admin user ID...${NC}" >&2
@@ -321,13 +330,14 @@ get_admin_user_id() {
     result=$(curl -s ${ZITADEL_CURL_ARGS} -X POST "${ZITADEL_URL}/management/v1/users/_search" \
         -H "Authorization: Bearer $pat" \
         -H "Content-Type: application/json" \
-        -d '{"queries": [{"userNameQuery": {"userName": "admin@ontokit.localhost", "method": "TEXT_QUERY_METHOD_EQUALS"}}]}')
+        -d '{"queries": [{"userNameQuery": {"userName": "admin@ontokit.", "method": "TEXT_QUERY_METHOD_STARTS_WITH"}}]}')
 
     admin_id=$(echo "$result" | jq -r '.result[0].id // empty')
+    admin_login=$(echo "$result" | jq -r '.result[0].preferredLoginName // empty')
 
     if [ -n "$admin_id" ]; then
-        echo -e "${GREEN}Admin user ID: $admin_id${NC}" >&2
-        echo "$admin_id"
+        echo -e "${GREEN}Admin user ID: $admin_id (${admin_login})${NC}" >&2
+        echo "${admin_id}|${admin_login}"
     else
         echo -e "${YELLOW}Admin user not found (may not be created yet)${NC}" >&2
         echo ""
@@ -389,9 +399,11 @@ main() {
     WEB_CLIENT_ID=$(echo "$WEB_CREDS" | cut -d: -f1)
     WEB_CLIENT_SECRET=$(echo "$WEB_CREDS" | cut -d: -f2)
 
-    # Get admin user ID for superadmin
+    # Get admin user ID and login name for superadmin and the summary below
     echo
-    ADMIN_USER_ID=$(get_admin_user_id "$PAT")
+    ADMIN_INFO=$(get_admin_user_id "$PAT")
+    ADMIN_USER_ID="${ADMIN_INFO%%|*}"
+    ADMIN_LOGIN_NAME="${ADMIN_INFO#*|}"
 
     echo
     echo -e "${BLUE}========================================${NC}"
@@ -474,9 +486,13 @@ main() {
     fi
 
     echo
-    echo -e "${GREEN}Zitadel Admin Login:${NC}"
-    echo -e "  URL:      ${ZITADEL_URL}/ui/console"
-    echo -e "  Username: admin@ontokit.localhost"
+    echo -e "${GREEN}Zitadel Admin Login (also your OntoKit sign-in):${NC}"
+    if [ -n "${ZITADEL_INSTANCE_HOST:-}" ]; then
+        echo -e "  Console:  https://${ZITADEL_INSTANCE_HOST}/ui/console"
+    else
+        echo -e "  Console:  ${ZITADEL_URL}/ui/console"
+    fi
+    echo -e "  Username: ${ADMIN_LOGIN_NAME:-admin@ontokit.localhost}"
     echo -e "  Password: Admin123!"
     echo
     echo -e "${GREEN}Mailpit (Email Testing):${NC}"
