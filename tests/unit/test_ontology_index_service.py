@@ -14,6 +14,7 @@ from ontokit.models.ontology_index import IndexingStatus, OntologyIndexStatus
 from ontokit.services.ontology_index import (
     OntologyIndexService,
     _extract_local_name,
+    _tree_sort_key,
 )
 
 PROJECT_ID = uuid.UUID("12345678-1234-5678-1234-567812345678")
@@ -54,6 +55,58 @@ class TestExtractLocalName:
     def test_no_separator(self) -> None:
         """Returns the full IRI when no '#' or '/' is present."""
         assert _extract_local_name("Person") == "Person"
+
+
+# ---------------------------------------------------------------------------
+# _tree_sort_key (module-level helper)
+# ---------------------------------------------------------------------------
+
+
+class TestTreeSortKey:
+    def test_sh_order_sorts_before_notation_and_label(self) -> None:
+        """Nodes with sh:order come first, regardless of label or notation."""
+        ordered = _tree_sort_key("Zebra", 1.0, "ZZ99")
+        notated = _tree_sort_key("Aardvark", None, "AA01")
+        plain = _tree_sort_key("Aardvark", None, None)
+        assert ordered < notated < plain
+
+    def test_sh_order_is_numeric_not_lexicographic(self) -> None:
+        """sh:order 2 sorts before sh:order 10 (numeric comparison)."""
+        assert _tree_sort_key("a", 2.0, None) < _tree_sort_key("b", 10.0, None)
+
+    def test_notation_sorts_lexicographically(self) -> None:
+        """Without sh:order, notation ordering decides (PH01 < PH02)."""
+        assert _tree_sort_key("Inception", None, "PH01") < _tree_sort_key(
+            "Conceptualization", None, "PH02"
+        )
+
+    def test_label_fallback_is_case_insensitive(self) -> None:
+        """Without any sort annotation, labels compare case-insensitively."""
+        assert _tree_sort_key("apple", None, None) < _tree_sort_key("Banana", None, None)
+
+    def test_label_breaks_sh_order_ties(self) -> None:
+        """Equal sh:order values fall back to label order."""
+        assert _tree_sort_key("Alpha", 1.0, None) < _tree_sort_key("Beta", 1.0, None)
+
+    def test_full_precedence_ordering(self) -> None:
+        """Sorting a mixed sibling list groups: ordered, notated, plain."""
+        nodes = [
+            ("Plain B", None, None),
+            ("Notated Z", None, "N2"),
+            ("Ordered late", 5.0, None),
+            ("Plain A", None, None),
+            ("Ordered early", 1.0, None),
+            ("Notated A", None, "N1"),
+        ]
+        nodes.sort(key=lambda n: _tree_sort_key(n[0], n[1], n[2]))
+        assert [n[0] for n in nodes] == [
+            "Ordered early",
+            "Ordered late",
+            "Notated A",
+            "Notated Z",
+            "Plain A",
+            "Plain B",
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -635,7 +688,16 @@ class TestGetRootClasses:
         mock_labels = MagicMock()
         mock_labels.scalars.return_value.all.return_value = [mock_label]
 
-        mock_db.execute.side_effect = [mock_roots_result, mock_entities, mock_labels]
+        # Sort annotation resolution (sh:order / skos:notation): none present
+        mock_sort_annotations = MagicMock()
+        mock_sort_annotations.all.return_value = []
+
+        mock_db.execute.side_effect = [
+            mock_roots_result,
+            mock_entities,
+            mock_labels,
+            mock_sort_annotations,
+        ]
 
         result = await service.get_root_classes(PROJECT_ID, BRANCH)
         assert len(result) == 1
@@ -686,7 +748,16 @@ class TestGetClassChildren:
         mock_labels = MagicMock()
         mock_labels.scalars.return_value.all.return_value = []
 
-        mock_db.execute.side_effect = [mock_children_result, mock_entities, mock_labels]
+        # Sort annotation resolution (sh:order / skos:notation): none present
+        mock_sort_annotations = MagicMock()
+        mock_sort_annotations.all.return_value = []
+
+        mock_db.execute.side_effect = [
+            mock_children_result,
+            mock_entities,
+            mock_labels,
+            mock_sort_annotations,
+        ]
 
         result = await service.get_class_children(PROJECT_ID, BRANCH, "http://example.org/Animal")
         assert len(result) == 1
