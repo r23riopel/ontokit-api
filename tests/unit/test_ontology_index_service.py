@@ -688,7 +688,16 @@ class TestGetRootClasses:
         mock_labels = MagicMock()
         mock_labels.scalars.return_value.all.return_value = [mock_label]
 
-        mock_db.execute.side_effect = [mock_roots_result, mock_entities, mock_labels]
+        # Sort annotation resolution (sh:order / skos:notation): none present
+        mock_sort_annotations = MagicMock()
+        mock_sort_annotations.all.return_value = []
+
+        mock_db.execute.side_effect = [
+            mock_roots_result,
+            mock_entities,
+            mock_labels,
+            mock_sort_annotations,
+        ]
 
         result = await service.get_root_classes(PROJECT_ID, BRANCH)
         assert len(result) == 1
@@ -739,7 +748,16 @@ class TestGetClassChildren:
         mock_labels = MagicMock()
         mock_labels.scalars.return_value.all.return_value = []
 
-        mock_db.execute.side_effect = [mock_children_result, mock_entities, mock_labels]
+        # Sort annotation resolution (sh:order / skos:notation): none present
+        mock_sort_annotations = MagicMock()
+        mock_sort_annotations.all.return_value = []
+
+        mock_db.execute.side_effect = [
+            mock_children_result,
+            mock_entities,
+            mock_labels,
+            mock_sort_annotations,
+        ]
 
         result = await service.get_class_children(PROJECT_ID, BRANCH, "http://example.org/Animal")
         assert len(result) == 1
